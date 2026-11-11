@@ -892,6 +892,11 @@ mod tests {
         );
         app.apply(Action::ReturnToCall, &ctx);
         assert!(!app.call_surface_hidden, "the strip brings the window back");
+        // Closed to the tray, the call's window goes with the main one, and
+        // the call is still there to open it again with the next window.
+        app.window_gone();
+        assert!(!app.call_in_window);
+        assert!(app.call_live() && !app.call_surface_hidden);
     }
 
     #[test]

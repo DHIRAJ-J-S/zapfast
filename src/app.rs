@@ -2198,6 +2198,8 @@ impl App {
         // The window is gone with the full screen it was in; a new one starts
         // at its normal size.
         self.call_fullscreen = false;
+        // The call's own window went with it, and opens again with the next.
+        self.call_in_window = false;
     }
 
     /// What the conversation shows behind its bubbles, for the chat and the
