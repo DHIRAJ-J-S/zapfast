@@ -130,7 +130,7 @@ pub fn handle(app: &mut App, ctx: &egui::Context) {
             && app.reaction_target.is_none()
             && app.recording.is_none()
             // The call screen covers the chats.
-            && (app.call.is_none() || app.call_surface_hidden)
+            && !app.call_covers_window()
             && messages_key_free
         {
             key(
@@ -190,7 +190,7 @@ pub fn handle(app: &mut App, ctx: &egui::Context) {
         && !app.show_update
         && app.picker.is_none()
         && app.reaction_target.is_none()
-        && (app.call.is_none() || app.call_surface_hidden)
+        && !app.call_covers_window()
         && !menu_open
         && let Some(chat) = app.open_chat.clone()
         && ctx.memory(|memory| memory.has_focus(crate::ui::conversation::messages_list_id(&chat)))
@@ -207,7 +207,7 @@ pub fn handle(app: &mut App, ctx: &egui::Context) {
         && app.recording.is_none()
         && !menu_open
         // The call screen covers the chats.
-        && (app.call.is_none() || app.call_surface_hidden)
+        && !app.call_covers_window()
         && let Some((chat, id)) = focused_message(app, ctx)
     {
         let taken = message_keys(app, ctx, &chat, &id);
@@ -280,11 +280,11 @@ pub fn handle(app: &mut App, ctx: &egui::Context) {
             actions.push(Action::CancelEdit);
         } else if app.reply_to.is_some() {
             actions.push(Action::CancelReply);
-        } else if app.call_fullscreen {
+        } else if app.call_fullscreen && !app.call_in_window {
             // The window shrinks back first, and only then does the next Escape put the surface
             // aside. Neither one ends the call; only the hang-up button does that.
             actions.push(Action::ToggleCallFullscreen);
-        } else if app.call_surface_open() {
+        } else if app.call_surface_open() && !app.call_in_window {
             // The same move the surface's own button makes: the call keeps running, and the bar at
             // the bottom of the chat offers the way back.
             actions.push(Action::LeaveCallSurface);

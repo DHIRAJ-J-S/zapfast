@@ -557,8 +557,12 @@ video call; while that chat has a call, a hang-up button takes their place.
 The call screen opens as soon as you press the button and says
 **Connecting…** while the call is set up, **Calling…** once it is sent, and
 **Ringing…** once the other phone rings, when you also hear a ringback tone.
-Hanging up before then cancels the call before it reaches them. An incoming call takes over the
-window with the caller's picture and name, and **Accept** and **Decline**. It
+Hanging up before then cancels the call before it reaches them. The call screen
+opens in a window of its own, so the chats stay usable beside it, and the main
+window keeps a strip at the bottom with **Return to the call**, which brings the
+call window to the front. Where a second window is not possible, the call screen
+covers the main window instead. An incoming call's window stays above other
+windows until it is answered, with the caller's picture and name, and **Accept** and **Decline**. It
 also raises a desktop notification and plays a ringtone until it is answered, declined,
 or given up, so a window hidden in the tray does not hide the call. The
 ringtone follows your notification sound: with the sound set to **None**, or
@@ -573,7 +577,8 @@ microphone and speaker pickers, and hang up. Mute tells the other side, as on
 the phone. The arrow in the top corner puts the call screen aside: the call
 keeps running in a strip at the bottom of the window with **Return to the
 call** and a hang-up button, and you can read and write in any chat meanwhile.
-Escape does the same, and leaves full screen first. Only hanging up ends a
+Escape does the same, and leaves full screen first; so does closing the call's
+window, which never hangs up. Only hanging up ends a
 call; closing the window to the tray keeps it running. A call you hang up or
 decline leaves the screen at once; one the other side ends, declines, or
 misses, or one that could not connect, says so for a second and a half.

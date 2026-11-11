@@ -32,6 +32,70 @@ const PREVIEW_SHARE: f32 = 0.24;
 /// because the picture is not themed.
 const VIDEO_SCRIM: Color32 = Color32::from_black_alpha(150);
 
+/// The call window's viewport.
+pub fn viewport_id() -> egui::ViewportId {
+    egui::ViewportId::from_hash_of(SURFACE)
+}
+
+/// Whether the call goes in a native window of its own. Not behind the lock
+/// screen, which shows nothing, and not where the platform cannot open a
+/// second window: there the surface covers the main window as before.
+fn wants_window(app: &App, ctx: &egui::Context) -> bool {
+    app.call.is_some()
+        && !app.call_surface_hidden
+        && !app.app_lock.is_locked()
+        && !ctx.embed_viewports()
+}
+
+/// Draws the call in a window of its own, the way WhatsApp's desktop app
+/// does, so a ringing or live call never takes over the chats. Closing the
+/// window only steps away from the call: it keeps running in the strip at the
+/// bottom of the main window, which brings the window back.
+pub fn window(app: &mut App, ctx: &egui::Context) {
+    app.call_in_window = wants_window(app, ctx);
+    if !app.call_in_window {
+        return;
+    }
+    let Some(call) = app.call.as_ref() else {
+        return;
+    };
+    let ringing = call.phase == CallPhase::Incoming;
+    // Wide enough for the device pickers along the bottom: two for a voice
+    // call, three for a video one.
+    let (size, min_width) = if call.video {
+        (vec2(720.0, 540.0), 480.0)
+    } else {
+        (vec2(480.0, 600.0), 360.0)
+    };
+    let title = format!("{} - ZapFast", app.call_name());
+    let builder = egui::ViewportBuilder::default()
+        .with_title(title)
+        .with_app_id("zapfast-call")
+        .with_inner_size(size)
+        .with_min_inner_size([min_width, 420.0])
+        // A ringing call stays in sight over whatever else is open.
+        .with_window_level(if ringing {
+            egui::WindowLevel::AlwaysOnTop
+        } else {
+            egui::WindowLevel::Normal
+        });
+    ctx.show_viewport_immediate(viewport_id(), builder, |ui, _class| {
+        let ctx = ui.ctx().clone();
+        let (closing, escape) = ctx.input(|input| {
+            (
+                input.viewport().close_requested(),
+                input.key_pressed(egui::Key::Escape),
+            )
+        });
+        if escape && app.call_fullscreen {
+            app.actions.push(Action::ToggleCallFullscreen);
+        } else if closing || escape {
+            app.actions.push(Action::LeaveCallSurface);
+        }
+        show(app, &ctx);
+    });
+}
+
 /// Draws the call surface over the window, when a call wants the screen.
 /// A call the reader stepped away from is drawn by [`strip`] instead.
 pub fn show(app: &mut App, ctx: &egui::Context) {
@@ -102,7 +166,7 @@ pub fn strip(app: &mut App, ui: &mut egui::Ui) {
     let Some(call) = app.call.clone() else {
         return;
     };
-    if !app.call_surface_hidden {
+    if !app.call_surface_hidden && !app.call_in_window {
         return;
     }
     let palette = app.palette;
@@ -616,7 +680,11 @@ fn devices(ui: &mut egui::Ui, app: &mut App, call: &CallUpdate, palette: &Palett
     let mut actions = Vec::new();
     {
         let pickers = if call.video { 3.0 } else { 2.0 };
-        let width = pickers * PICKER + (pickers - 1.0) * 16.0;
+        let gaps = (pickers - 1.0) * 16.0;
+        // Narrower where the window is, so the last picker and its menu stay
+        // inside it.
+        let each = ((ui.available_width() - gaps) / pickers).clamp(PICKER_MIN, PICKER);
+        let width = pickers * each + gaps;
         ui.add_space(((ui.available_width() - width) / 2.0).max(0.0));
         Picker {
             salt: "call-microphone",
@@ -625,6 +693,7 @@ fn devices(ui: &mut egui::Ui, app: &mut App, call: &CallUpdate, palette: &Palett
             default_label: &default_label,
             current: call.microphone.as_deref(),
             devices: &microphones,
+            width: each,
             palette,
         }
         .show(ui, &mut actions, Action::SetCallMicrophone);
@@ -636,6 +705,7 @@ fn devices(ui: &mut egui::Ui, app: &mut App, call: &CallUpdate, palette: &Palett
             default_label: &default_label,
             current: call.speaker.as_deref(),
             devices: &speakers,
+            width: each,
             palette,
         }
         .show(ui, &mut actions, Action::SetCallSpeaker);
@@ -648,6 +718,7 @@ fn devices(ui: &mut egui::Ui, app: &mut App, call: &CallUpdate, palette: &Palett
                 default_label: &gettext(locale, "First camera"),
                 current: call.camera.as_deref(),
                 devices: &cameras,
+                width: each,
                 palette,
             }
             .show(ui, &mut actions, Action::SetCallCameraDevice);
@@ -658,6 +729,8 @@ fn devices(ui: &mut egui::Ui, app: &mut App, call: &CallUpdate, palette: &Palett
 
 /// The width of one device picker, and the height of the row they make.
 const PICKER: f32 = 200.0;
+/// The narrowest a picker gets in a small window.
+const PICKER_MIN: f32 = 120.0;
 const PICKER_HEIGHT: f32 = 60.0;
 
 /// One device picker: its title with an icon, and what the machine has.
@@ -668,6 +741,8 @@ struct Picker<'a> {
     default_label: &'a str,
     current: Option<&'a str>,
     devices: &'a [(String, String)],
+    /// How wide it is drawn: [`PICKER`], or less in a narrow window.
+    width: f32,
     palette: &'a Palette,
 }
 
@@ -689,14 +764,14 @@ impl Picker<'_> {
             .or_else(|| self.current.map(str::to_owned))
             .unwrap_or_else(|| self.default_label.to_owned());
         ui.vertical(|ui| {
-            ui.set_width(PICKER);
+            ui.set_width(self.width);
             ui.horizontal(|ui| {
                 theme::icon(ui, self.icon, 13.0, self.palette.secondary);
                 theme::text(ui, self.title, theme::medium(12.0), self.palette.secondary);
             });
             egui::ComboBox::from_id_salt(self.salt)
                 .selected_text(label)
-                .width(PICKER)
+                .width(self.width)
                 .truncate()
                 .show_ui(ui, |ui| {
                     if ui

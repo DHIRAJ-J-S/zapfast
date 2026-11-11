@@ -50,6 +50,12 @@ impl App {
     /// Whether the full call screen is what the reader is looking at: a call
     /// the reader has not stepped away from. A ringing call is answered, not
     /// stepped away from, and a finished one is only saying how it ended.
+    /// Whether the call screen covers the main window's chats. A call in a
+    /// window of its own never does.
+    pub fn call_covers_window(&self) -> bool {
+        self.call.is_some() && !self.call_surface_hidden && !self.call_in_window
+    }
+
     pub fn call_surface_open(&self) -> bool {
         self.call
             .as_ref()
@@ -205,7 +211,12 @@ impl App {
     fn set_call_fullscreen(&mut self, ctx: &egui::Context, fullscreen: bool) {
         if self.call_fullscreen != fullscreen {
             self.call_fullscreen = fullscreen;
-            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(fullscreen));
+            let command = egui::ViewportCommand::Fullscreen(fullscreen);
+            if self.call_in_window {
+                ctx.send_viewport_cmd_to(crate::ui::call::viewport_id(), command);
+            } else {
+                ctx.send_viewport_cmd(command);
+            }
         }
     }
 
@@ -714,6 +725,11 @@ impl App {
             Action::ReturnToCall if self.call.is_some() => {
                 if !self.call_is_private() {
                     self.call_surface_hidden = false;
+                    // Brings an open call window to the front.
+                    ctx.send_viewport_cmd_to(
+                        crate::ui::call::viewport_id(),
+                        egui::ViewportCommand::Focus,
+                    );
                 } else if self.call_account.as_ref() == Some(&self.account().id) {
                     self.apply(Action::OpenLockedFolder, ctx);
                 }
@@ -845,6 +861,37 @@ mod tests {
         app.handle_call_update(update(1, CallPhase::Active));
         assert_eq!(app.call_notified, None);
         assert!(app.call_surface_open(), "the running call is the screen");
+    }
+
+    #[test]
+    fn a_call_in_its_own_window_leaves_the_chats_usable() {
+        let directory = tempfile::tempdir().unwrap();
+        let (mut app, mut commands) = app(directory.path());
+        let ctx = egui::Context::default();
+        app.handle_call_update(update(1, CallPhase::Incoming));
+        assert!(
+            app.call_covers_window(),
+            "without a window it covers the chats"
+        );
+        app.call_in_window = true;
+        assert!(
+            !app.call_covers_window(),
+            "in its own window it covers nothing"
+        );
+        app.handle_call_update(update(1, CallPhase::Active));
+        sent(&mut commands);
+        // Closing the call's window steps away; the call keeps running.
+        app.apply(Action::LeaveCallSurface, &ctx);
+        assert!(app.call_surface_hidden);
+        assert!(app.call_live());
+        assert!(
+            !sent(&mut commands)
+                .iter()
+                .any(|command| matches!(command, Command::HangupCall)),
+            "stepping away never hangs up"
+        );
+        app.apply(Action::ReturnToCall, &ctx);
+        assert!(!app.call_surface_hidden, "the strip brings the window back");
     }
 
     #[test]

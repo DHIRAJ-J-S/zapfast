@@ -871,6 +871,9 @@ pub struct App {
     /// leaving it never touches the call, and a call that ends puts the
     /// window back itself.
     pub call_fullscreen: bool,
+    /// Whether this pass draws the call in a native window of its own rather
+    /// than over the chats. Set by [`crate::ui::call::window`] every pass.
+    pub call_in_window: bool,
     /// The incoming call the desktop was told about, so its notification can
     /// be taken back once it is answered or given up.
     call_notified: Option<u64>,
@@ -1756,6 +1759,7 @@ impl App {
             call_devices_open: false,
             call_surface_hidden: false,
             call_fullscreen: false,
+            call_in_window: false,
             call_notified: None,
             call_rings: None,
             call_tones: Default::default(),
@@ -7135,6 +7139,9 @@ impl App {
     /// from `eframe::App::logic`, after [`Self::background_frame`].
     pub fn window_logic(&mut self, ctx: &egui::Context) {
         self.sync_window_state(ctx);
+        // The call's own window is drawn here rather than in `frame_ui`, so it
+        // keeps going while the main window is minimized or covered.
+        crate::ui::call::window(self, ctx);
         // Close the window and continue headless when background mode is
         // enabled. Decided here rather than in `frame_ui`, which eframe skips
         // for a minimized window: closing one from the taskbar quit instead.

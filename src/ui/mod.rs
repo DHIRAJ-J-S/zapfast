@@ -76,7 +76,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
         // The day filter keeps egui's own order among its days.
         && !app.chat_search_calendar
         // The call screen covers the chats.
-        && (app.call.is_none() || app.call_surface_hidden)
+        && !app.call_covers_window()
         // A name typed in the info panel keeps Tab between its fields.
         && !(app.info_visible()
             && (app.contact_edit.is_some()
@@ -120,7 +120,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
     dialogs::show(app, ctx);
     image_preview::show(app, ctx);
     image_preview::show_sticker(app, ctx);
-    call::show(app, ctx);
+    if !app.call_in_window {
+        call::show(app, ctx);
+    }
     image_editor::show(app, ctx);
     overlay::finish(ctx);
     drop_target(app, ctx);
